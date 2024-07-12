@@ -1,37 +1,32 @@
 import type { FastifyInstance } from "fastify"
 import type { ZodTypeProvider } from "fastify-type-provider-zod"
-import { z } from "zod"
-import { prisma } from "../lib/prisma"
-import { getMailClient } from "../lib/mail"
 import nodemailer from 'nodemailer'
-import dayjs from 'dayjs'
-import localizedFormat from 'dayjs/plugin/localizedFormat'
-import 'dayjs/locale/pt-br'
-
-dayjs.extend(localizedFormat)
-dayjs.locale('pt-br')
+import { z } from "zod"
+import { dayjs } from "../lib/dayjs"
+import { getMailClient } from "../lib/mail"
+import { prisma } from "../lib/prisma"
 
 export async function createTrip(app: FastifyInstance){
   app.withTypeProvider<ZodTypeProvider>().post('/trips', {
     schema: {   
       body: z.object({
-        destination: z.string().min(4),
+        destination: z.string().trim().min(4, { message: "Destination must be at least 4 characters long" }),
         starts_at: z.coerce.date(),
         ends_at: z.coerce.date(),
-        owner_name: z.string(),
-        owner_email: z.string().email(),
-        emails_to_invite: z.array(z.string().email())
-      })
+        owner_name: z.string().trim().min(3, { message: "Name must be at least 3 characters long" }),
+        owner_email: z.string().trim().email({ message: "Invalid email" }),
+        emails_to_invite: z.array(z.string().trim().email({ message: "Invalid email" }))
+      })      
     },
   }, async ( req, res )=>{
     const { destination, starts_at, ends_at, owner_name, owner_email, emails_to_invite } = req.body
 
     if(dayjs(starts_at).isBefore(new Date())){
-      return res.status(500).send({ message: 'Invalid trip start date.'})
+      throw new Error('Invalid trip start date.')
     }
 
     if(!dayjs(starts_at).isBefore(ends_at)){
-      return res.status(500).send({ message: 'Invalid trip end date.'})
+      throw new Error('Invalid trip end date.')
     }
 
     
@@ -92,6 +87,6 @@ export async function createTrip(app: FastifyInstance){
 
     console.log(nodemailer.getTestMessageUrl(message))
 
-    return { tripId: trip.id }
+    return res.status(201).send({ message: 'Viagem agendada com sucesso, confirme o email para prosseguir.'})
   })
 }
